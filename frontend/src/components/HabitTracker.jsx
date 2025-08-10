@@ -370,10 +370,55 @@ const HabitTracker = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-96 bg-background rounded-lg p-4">
-                  <p className="text-center text-muted-foreground">
-                    Calendar view will show your habit completion history here
-                  </p>
+                <div className="space-y-6">
+                  {habits.map((habit) => (
+                    <div key={habit.id} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{habit.name}</h4>
+                        <Badge variant="outline" className="text-xs">
+                          {habit.category}
+                        </Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-2">
+                        {Array.from({ length: 21 }, (_, i) => {
+                          const date = new Date();
+                          date.setDate(date.getDate() - (20 - i));
+                          const dateStr = date.toISOString().split('T')[0];
+                          const isCompleted = completions[habit.id]?.[dateStr];
+                          const isToday = dateStr === new Date().toISOString().split('T')[0];
+                          
+                          return (
+                            <div
+                              key={i}
+                              className={`
+                                w-8 h-8 rounded-lg flex items-center justify-center text-xs cursor-pointer
+                                transition-colors duration-200
+                                ${isCompleted 
+                                  ? 'bg-green-500 text-white hover:bg-green-600' 
+                                  : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                }
+                                ${isToday ? 'ring-2 ring-blue-500' : ''}
+                              `}
+                              onClick={() => toggleHabitCompletion(habit.id, date)}
+                              title={date.toLocaleDateString()}
+                            >
+                              {date.getDate()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {habits.length === 0 && (
+                    <div className="text-center py-8">
+                      <CalendarIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">
+                        Add some habits to see your completion calendar
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
