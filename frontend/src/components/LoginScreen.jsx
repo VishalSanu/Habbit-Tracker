@@ -24,25 +24,25 @@ const LoginScreen = () => {
     setIsLoading(true);
     
     try {
-      // Initialize Google OAuth (mock implementation)
-      // In a real app, you'd use the Google Sign-In SDK
+      // For demo purposes, we'll use mock data
       const mockGoogleToken = 'mock-google-token-for-demo';
       
-      // For demo purposes, we'll skip the actual Google OAuth
-      // and directly call our backend with mock data
       toast({
         title: "Demo Mode",
         description: "Google OAuth integration would be implemented here. Proceeding with demo login.",
       });
       
-      // Mock successful login for demo
-      setTimeout(() => {
-        setIsLoading(false);
+      // Call the actual loginWithGoogle function from AuthContext
+      const result = await loginWithGoogle(mockGoogleToken);
+      
+      if (result.success) {
         toast({
           title: "Login Successful!",
           description: "Welcome to Habit Tracker",
         });
-      }, 2000);
+      } else {
+        throw new Error(result.error);
+      }
       
     } catch (error) {
       console.error('Login failed:', error);
@@ -51,6 +51,7 @@ const LoginScreen = () => {
         description: error.message || "Please try again",
         variant: "destructive",
       });
+    } finally {
       setIsLoading(false);
     }
   };
