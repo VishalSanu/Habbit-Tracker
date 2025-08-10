@@ -23,17 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useToast } from '../hooks/use-toast';
 import { getMockHabits, getMockCompletions, addMockHabit, toggleMockCompletion, deleteMockHabit } from '../services/mockData';
 
-const locales = {
-  'en-US': enUS,
-};
 
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  locales,
-});
 
 const HabitTracker = () => {
   const [habits, setHabits] = useState([]);
