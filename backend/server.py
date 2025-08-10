@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import List
 from datetime import datetime, date, timedelta
+import uuid
 
 # Import our modules
 from models import *
@@ -16,6 +17,9 @@ from utils import calculate_current_streak, calculate_completion_rate, format_ha
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Initialize database connection
+Database.initialize()
 
 # Create the main app without a prefix
 app = FastAPI(title="Habit Tracker API")
