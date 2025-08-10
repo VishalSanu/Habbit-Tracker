@@ -27,6 +27,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 async def verify_google_token(token: str) -> dict:
     """Verify Google OAuth token and return user info"""
+    # Handle demo/mock token for testing
+    if token == "mock-google-token-for-demo":
+        return {
+            "google_id": "demo-user-123",
+            "email": "demo@habittracker.com",
+            "name": "Demo User",
+            "picture": "https://via.placeholder.com/150"
+        }
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
