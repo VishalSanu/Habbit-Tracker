@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-
 import { 
   Plus, 
   Trash2, 
@@ -14,27 +13,43 @@ import {
   Target,
   TrendingUp,
   CheckCircle,
-  Circle
+  Circle,
+  Settings,
+  Bell,
+  LogOut,
+  User
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
 import { useToast } from '../hooks/use-toast';
-import { getMockHabits, getMockCompletions, addMockHabit, toggleMockCompletion, deleteMockHabit } from '../services/mockData';
-
-
+import { useAuth } from '../contexts/AuthContext';
+import { habitService } from '../services/habitService';
+import notificationService from '../services/notificationService';
+import NotificationSettings from './NotificationSettings';
 
 const HabitTracker = () => {
   const [habits, setHabits] = useState([]);
   const [completions, setCompletions] = useState({});
+  const [stats, setStats] = useState({
+    total_habits: 0,
+    completed_today: 0,
+    today_completion_rate: 0
+  });
   const [darkMode, setDarkMode] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [isAddHabitOpen, setIsAddHabitOpen] = useState(false);
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitCategory, setNewHabitCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
+  const [enableNotifications, setEnableNotifications] = useState(false);
+  const [notificationTime, setNotificationTime] = useState('09:00');
+  const [loading, setLoading] = useState(true);
+
   const { toast } = useToast();
+  const { user, logout, subscribeToNotifications } = useAuth();
 
   const predefinedCategories = [
     'Health & Fitness',
@@ -47,18 +62,82 @@ const HabitTracker = () => {
   ];
 
   useEffect(() => {
-    // Load mock data
-    setHabits(getMockHabits());
-    setCompletions(getMockCompletions());
-    
-    // Check for saved dark mode preference
-    const savedDarkMode = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(savedDarkMode);
-    
-    if (savedDarkMode) {
-      document.documentElement.classList.add('dark');
-    }
+    initializeApp();
   }, []);
+
+  const initializeApp = async () => {
+    try {
+      setLoading(true);
+      
+      // Initialize notification service
+      await notificationService.initialize();
+      
+      // Load user data
+      await loadHabits();
+      await loadStats();
+      
+      // Check for saved dark mode preference
+      const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+      setDarkMode(savedDarkMode);
+      
+      if (savedDarkMode) {
+        document.documentElement.classList.add('dark');
+      }
+      
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load your data. Please refresh the page.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHabits = async () => {
+    try {
+      const habitsData = await habitService.getHabits();
+      setHabits(habitsData);
+      
+      // Load completions for each habit
+      const completionsData = {};
+      for (const habit of habitsData) {
+        try {
+          const habitCompletions = await habitService.getCompletions(habit.id, 30);
+          completionsData[habit.id] = habitCompletions.completions || {};
+        } catch (error) {
+          console.error(`Failed to load completions for habit ${habit.id}:`, error);
+          completionsData[habit.id] = {};
+        }
+      }
+      setCompletions(completionsData);
+      
+    } catch (error) {
+      console.error('Failed to load habits:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load your habits.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const statsData = await habitService.getStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+      // Use default stats on error
+      setStats({
+        total_habits: 0,
+        completed_today: 0,
+        today_completion_rate: 0
+      });
+    }
+  };
 
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode;
@@ -72,74 +151,124 @@ const HabitTracker = () => {
     }
   };
 
-  const addHabit = () => {
+  const addHabit = async () => {
     if (!newHabitName.trim()) return;
     
-    const category = newHabitCategory === 'Custom' ? customCategory : newHabitCategory;
-    const newHabit = addMockHabit(newHabitName.trim(), category);
-    
-    setHabits(prev => [...prev, newHabit]);
-    setNewHabitName('');
-    setNewHabitCategory('');
-    setCustomCategory('');
-    setIsAddHabitOpen(false);
-    
-    toast({
-      title: "Habit Added!",
-      description: `"${newHabit.name}" has been added to your habits.`,
-    });
-  };
-
-  const deleteHabit = (habitId) => {
-    deleteMockHabit(habitId);
-    setHabits(prev => prev.filter(h => h.id !== habitId));
-    
-    toast({
-      title: "Habit Deleted",
-      description: "The habit has been removed from your tracker.",
-    });
-  };
-
-  const toggleHabitCompletion = (habitId, date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    const newCompletions = toggleMockCompletion(habitId, dateStr);
-    setCompletions(newCompletions);
-  };
-
-  const getCompletionRate = (habitId, days = 30) => {
-    const today = new Date();
-    let completed = 0;
-    
-    for (let i = 0; i < days; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+    try {
+      const category = newHabitCategory === 'Custom' ? customCategory : newHabitCategory;
+      const notificationSettings = {
+        enabled: enableNotifications,
+        time: notificationTime,
+        days: [1, 2, 3, 4, 5, 6, 0] // All days by default
+      };
       
-      if (completions[habitId]?.[dateStr]) {
-        completed++;
+      const newHabit = await habitService.createHabit({
+        name: newHabitName.trim(),
+        category,
+        notification: notificationSettings
+      });
+      
+      setHabits(prev => [...prev, newHabit]);
+      setCompletions(prev => ({
+        ...prev,
+        [newHabit.id]: {}
+      }));
+      
+      // Reset form
+      setNewHabitName('');
+      setNewHabitCategory('');
+      setCustomCategory('');
+      setEnableNotifications(false);
+      setNotificationTime('09:00');
+      setIsAddHabitOpen(false);
+      
+      // Reload stats
+      await loadStats();
+      
+      toast({
+        title: "Habit Added!",
+        description: `"${newHabit.name}" has been added to your habits.`,
+      });
+      
+      // Setup notification if enabled
+      if (enableNotifications && !notificationService.getSubscriptionStatus()) {
+        try {
+          const subscription = await notificationService.subscribe();
+          await subscribeToNotifications(subscription);
+        } catch (error) {
+          console.error('Failed to setup notifications:', error);
+        }
       }
+      
+    } catch (error) {
+      console.error('Failed to add habit:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add habit. Please try again.",
+        variant: "destructive",
+      });
     }
-    
-    return Math.round((completed / days) * 100);
+  };
+
+  const deleteHabit = async (habitId) => {
+    try {
+      await habitService.deleteHabit(habitId);
+      setHabits(prev => prev.filter(h => h.id !== habitId));
+      setCompletions(prev => {
+        const updated = { ...prev };
+        delete updated[habitId];
+        return updated;
+      });
+      
+      await loadStats();
+      
+      toast({
+        title: "Habit Deleted",
+        description: "The habit has been removed from your tracker.",
+      });
+    } catch (error) {
+      console.error('Failed to delete habit:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete habit. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleHabitCompletion = async (habitId, date) => {
+    try {
+      const dateStr = date.toISOString().split('T')[0];
+      const result = await habitService.toggleCompletion(habitId, dateStr);
+      
+      setCompletions(prev => ({
+        ...prev,
+        [habitId]: {
+          ...prev[habitId],
+          [dateStr]: result.completed
+        }
+      }));
+      
+      await loadStats();
+      
+    } catch (error) {
+      console.error('Failed to toggle completion:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update completion. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getCurrentStreak = (habitId) => {
-    const today = new Date();
-    let streak = 0;
-    
-    for (let i = 0; i < 365; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      if (completions[habitId]?.[dateStr]) {
-        streak++;
-      } else if (i > 0) {
-        break;
-      }
-    }
-    
-    return streak;
+    const habit = habits.find(h => h.id === habitId);
+    return habit?.stats?.current_streak || 0;
+  };
+
+  const getCompletionRate = (habitId) => {
+    const habit = habits.find(h => h.id === habitId);
+    return habit?.stats?.completion_rate || 0;
   };
 
   const isHabitCompletedOnDate = (habitId, date) => {
@@ -147,21 +276,21 @@ const HabitTracker = () => {
     return !!completions[habitId]?.[dateStr];
   };
 
-  const getTodayStats = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const totalHabits = habits.length;
-    const completedToday = habits.filter(habit => 
-      completions[habit.id]?.[today]
-    ).length;
-    
-    return {
-      totalHabits,
-      completedToday,
-      completionRate: totalHabits > 0 ? Math.round((completedToday / totalHabits) * 100) : 0
-    };
+  const handleLogout = () => {
+    logout();
+    toast({
+      title: "Logged Out",
+      description: "You have been successfully logged out.",
+    });
   };
 
-  const stats = getTodayStats();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-colors duration-200 ${darkMode ? 'dark' : ''}`}>
@@ -170,10 +299,21 @@ const HabitTracker = () => {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">Habit Tracker</h1>
-            <p className="text-muted-foreground">Build better habits, one day at a time</p>
+            <p className="text-muted-foreground">
+              Welcome back, {user?.name || 'User'}!
+            </p>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsNotificationSettingsOpen(true)}
+              className="hover:bg-accent transition-colors"
+            >
+              <Bell className="h-5 w-5" />
+            </Button>
+            
             <Button
               variant="outline"
               size="icon"
@@ -181,6 +321,15 @@ const HabitTracker = () => {
               className="hover:bg-accent transition-colors"
             >
               {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleLogout}
+              className="hover:bg-accent transition-colors"
+            >
+              <LogOut className="h-5 w-5" />
             </Button>
             
             <Dialog open={isAddHabitOpen} onOpenChange={setIsAddHabitOpen}>
@@ -233,6 +382,29 @@ const HabitTracker = () => {
                     </div>
                   )}
                   
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="enable-notifications">Enable Notifications</Label>
+                      <Switch
+                        id="enable-notifications"
+                        checked={enableNotifications}
+                        onCheckedChange={setEnableNotifications}
+                      />
+                    </div>
+                    
+                    {enableNotifications && (
+                      <div>
+                        <Label htmlFor="notification-time">Reminder Time</Label>
+                        <Input
+                          id="notification-time"
+                          type="time"
+                          value={notificationTime}
+                          onChange={(e) => setNotificationTime(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
                   <Button onClick={addHabit} className="w-full">
                     Add Habit
                   </Button>
@@ -249,7 +421,7 @@ const HabitTracker = () => {
               <Target className="h-8 w-8 text-blue-600 dark:text-blue-400 mr-3" />
               <div>
                 <p className="text-sm text-blue-700 dark:text-blue-300">Total Habits</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.totalHabits}</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.total_habits}</p>
               </div>
             </CardContent>
           </Card>
@@ -259,7 +431,7 @@ const HabitTracker = () => {
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400 mr-3" />
               <div>
                 <p className="text-sm text-green-700 dark:text-green-300">Completed Today</p>
-                <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completedToday}</p>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completed_today}</p>
               </div>
             </CardContent>
           </Card>
@@ -269,7 +441,7 @@ const HabitTracker = () => {
               <TrendingUp className="h-8 w-8 text-purple-600 dark:text-purple-400 mr-3" />
               <div>
                 <p className="text-sm text-purple-700 dark:text-purple-300">Today's Rate</p>
-                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{stats.completionRate}%</p>
+                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{Math.round(stats.today_completion_rate)}%</p>
               </div>
             </CardContent>
           </Card>
@@ -323,9 +495,17 @@ const HabitTracker = () => {
                             </Button>
                             <div>
                               <h3 className="font-semibold">{habit.name}</h3>
-                              <Badge variant="secondary" className="text-xs">
-                                {habit.category}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {habit.category}
+                                </Badge>
+                                {habit.notification?.enabled && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Bell className="h-3 w-3 mr-1" />
+                                    {habit.notification.time}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
                           
@@ -424,6 +604,12 @@ const HabitTracker = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Notification Settings Dialog */}
+        <NotificationSettings
+          open={isNotificationSettingsOpen}
+          onOpenChange={setIsNotificationSettingsOpen}
+        />
       </div>
     </div>
   );
